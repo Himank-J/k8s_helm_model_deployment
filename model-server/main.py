@@ -9,12 +9,37 @@ from fastapi.middleware.cors import CORSMiddleware
 # Clean up resources on shutdown
 pipe = None
 
+# Update environment variables
+REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
+REDIS_PORT = os.environ.get("REDIS_PORT", "6379")
+REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "")
+HOSTNAME = socket.gethostname()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    
+    # Redis setup
+    logger.info(f"Creating Redis connection pool: host={REDIS_HOST}, port={REDIS_PORT}")
+    redis_pool = redis.ConnectionPool(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        password=REDIS_PASSWORD,
+        db=0,
+        decode_responses=True,
+    )
+    logger.info("Model server initialization complete")
+
     # Load model on startup
     global pipe
     pipe = pipeline("image-classification", model="dima806/facial_emotions_image_detection")
     yield
+
+@app.on_event("shutdown")
+async def shutdown():
+    """Cleanup connection pool on shutdown"""
+    logger.info("Shutting down model server")
+    await redis_pool.aclose()
+    logger.info("Cleanup complete")
 
 app = FastAPI(lifespan=lifespan)
 
@@ -27,24 +52,79 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+async def health_check():
+    try:
+        redis_client = get_redis()
+        redis_connected = await redis_client.ping()
+    except Exception as e:
+        logger.error(f"Redis health check failed: {str(e)}")
+        redis_connected = False
+
+    return {
+        "status": "healthy",
+        "hostname": HOSTNAME,
+        "model": MODEL_NAME,
+        "device": str(device) if "device" in globals() else None,
+        "redis": {
+            "host": REDIS_HOST,
+            "port": REDIS_PORT,
+            "connected": redis_connected,
+        }
+    }
+
+def get_redis():
+    return redis.Redis(connection_pool=redis_pool)
+
+async def write_to_cache(file: bytes, result: Dict[str, float]) -> None:
+    cache = get_redis()
+    hash = str(zlib.adler32(file))
+    logger.debug(f"Writing prediction to cache with hash: {hash}")
+    await cache.set(hash, json.dumps(result))
+    logger.debug("Cache write complete")
+
+async def check_cached(image: bytes):
+    hash = zlib.adler32(image)
+    cache = get_redis()
+
+    logger.debug(f"Checking cache for image hash: {hash}")
+    data = await cache.get(hash)
+
+    if data:
+        logger.info(f"Cache hit for image hash: {hash}")
+    else:
+        logger.info(f"Cache miss for image hash: {hash}")
+
+    return json.loads(data) if data else None
+    
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    # Read and process the image
+    # Read image data
     image_data = await file.read()
-    image = Image.open(io.BytesIO(image_data))
     
-    # Use the pipeline directly to get predictions
+    # Check cache first
+    cached_result = await check_cached(image_data)
+    if cached_result:
+        return cached_result
+    
+    # If not in cache, process the image
+    image = Image.open(io.BytesIO(image_data))
     results = pipe(images=image)
     
-    # Convert predictions to desired format
+    # Format predictions
     predictions = []
     for result in results:
         predictions.append({
             "emotion": result["label"],
             "probability": f"{result['score']:.4f}"
         })
-
-    return {"predictions": predictions}
+    
+    output = {"predictions": predictions}
+    
+    # Write results to cache
+    await write_to_cache(image_data, output)
+    
+    return output
 
 if __name__ == "__main__":
     import uvicorn

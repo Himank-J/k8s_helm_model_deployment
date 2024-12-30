@@ -5,7 +5,7 @@ import { Upload, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { Label } from '@/components/ui/label'
+// import { Label } from '@/components/ui/label'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import {
   AlertDialog,
@@ -88,8 +88,9 @@ export default function Home() {
   
       const data = await response.json()
       setPredictions(data.predictions)
-      setShowResults(true) // Show results after successful analysis
+      setShowResults(true)
     } catch (err) {
+      console.error(err)
       setError('Failed to analyze image. Please try again.')
     } finally {
       setIsLoading(false)

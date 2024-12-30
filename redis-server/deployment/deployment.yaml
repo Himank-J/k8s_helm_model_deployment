@@ -1,0 +1,59 @@
+# redis-db deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: redis-db
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: redis
+            role: master
+    template:
+        metadata:
+            labels:
+                app: redis
+                role: master
+        spec:
+            # volumes:
+            #     - name: redis-storage
+            #       persistentVolumeClaim:
+            #         claimName: redis-pvc
+            containers:
+                - name: redis-master
+                  image: redis:7.4.1
+                  resources:
+                      limits:
+                          cpu: 200m
+                          memory: 200Mi
+                  command:
+                      - redis-server
+                  args:
+                      - --requirepass
+                      - $(REDIS_PASSWORD)
+                  ports:
+                      - containerPort: 6379
+                  # volumeMounts:
+                  #     - name: redis-storage
+                  #       mountPath: /data
+                  env:
+                    - name: REDIS_PASSWORD
+                      value: rediscache 
+
+---
+
+# redis-db service
+apiVersion: v1
+kind: Service
+metadata:
+    name: redis-db-service
+    labels:
+        app: redis
+        role: master
+spec:
+    ports:
+        - port: 6379
+          targetPort: 6379
+    selector:
+        app: redis
+        role: master 
