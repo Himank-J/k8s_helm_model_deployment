@@ -15,12 +15,12 @@ spec:
     spec:
       containers:
       - name: model-server
-        image: model-server:latest
+        image: backend:latest
         imagePullPolicy: Never
         resources:
           limits:
             memory: "1Gi"
-            cpu: "1000m"
+            cpu: "200m"
         ports:
         - containerPort: 80
         env:
