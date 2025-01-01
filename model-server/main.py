@@ -2,9 +2,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File
 from PIL import Image
 import torch
-import io
+import io, os
 from transformers import pipeline
 from fastapi.middleware.cors import CORSMiddleware
+import socket
+import logging
+from typing import Dict, Annotated
+import redis.asyncio as redis
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - ModelServer - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 # Clean up resources on shutdown
 pipe = None
@@ -33,13 +43,6 @@ async def lifespan(app: FastAPI):
     global pipe
     pipe = pipeline("image-classification", model="dima806/facial_emotions_image_detection")
     yield
-
-@app.on_event("shutdown")
-async def shutdown():
-    """Cleanup connection pool on shutdown"""
-    logger.info("Shutting down model server")
-    await redis_pool.aclose()
-    logger.info("Cleanup complete")
 
 app = FastAPI(lifespan=lifespan)
 
