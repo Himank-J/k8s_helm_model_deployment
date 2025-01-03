@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File
 from PIL import Image
 import torch
-import io, os
+import io, os, json, zlib
 from transformers import pipeline
 from fastapi.middleware.cors import CORSMiddleware
 import socket
@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 # Clean up resources on shutdown
 pipe = None
+device = None
+redis_pool = None
 
 # Update environment variables
 REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
@@ -27,7 +29,11 @@ HOSTNAME = socket.gethostname()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    
+    global device, redis_pool
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Using device: {device}")
+
     # Redis setup
     logger.info(f"Creating Redis connection pool: host={REDIS_HOST}, port={REDIS_PORT}")
     redis_pool = redis.ConnectionPool(
@@ -37,12 +43,13 @@ async def lifespan(app: FastAPI):
         db=0,
         decode_responses=True,
     )
-    logger.info("Model server initialization complete")
 
     # Load model on startup
     global pipe
     pipe = pipeline("image-classification", model="dima806/facial_emotions_image_detection")
     yield
+    
+    logger.info("Model server initialization complete")
 
 app = FastAPI(lifespan=lifespan)
 
@@ -67,7 +74,7 @@ async def health_check():
     return {
         "status": "healthy",
         "hostname": HOSTNAME,
-        "model": MODEL_NAME,
+        "model": 'dima806/facial_emotions_image_detection',
         "device": str(device) if "device" in globals() else None,
         "redis": {
             "host": REDIS_HOST,

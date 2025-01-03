@@ -77,7 +77,7 @@ export default function Home() {
     formData.append('file', selectedImage)
   
     try {
-      const response = await fetch('http://0.0.0.0:8000/predict', {
+      const response = await fetch('http://127.0.0.1:54640/predict', {
         method: 'POST',
         body: formData,
       })

@@ -2,9 +2,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: model-server
+  name: {{ .Release.Name }}-model-server
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app: model-server
@@ -15,29 +15,27 @@ spec:
     spec:
       containers:
       - name: model-server
-        image: modelbackend:latest
-        imagePullPolicy: Never
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
         resources:
-          limits:
-            memory: "1Gi"
-            cpu: "200m"
+          {{- toYaml .Values.resources | nindent 12 }}
         ports:
-        - containerPort: 80
+        - containerPort: {{ .Values.service.targetPort }}
         env:
           - name: REDIS_HOST
             valueFrom:
               secretKeyRef:
-                name: redis-secret
+                name: {{ .Values.redis.secretName }}
                 key: REDIS_HOST
           - name: REDIS_PORT
             valueFrom:
               secretKeyRef:
-                name: redis-secret
+                name: {{ .Values.redis.secretName }}
                 key: REDIS_PORT
           - name: REDIS_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: redis-secret
+                name: {{ .Values.redis.secretName }}
                 key: REDIS_PASSWORD
 
 ---
@@ -46,11 +44,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: model-server-service
+  name: {{ .Release.Name }}-model-server-service
 spec:
   selector:
     app: model-server
   ports:
-  - port: 8000
-    targetPort: 8000
-  type: ClusterIP
+  - port: {{ .Values.service.port }}
+    targetPort: {{ .Values.service.targetPort }}
+  type: {{ .Values.service.type }}
