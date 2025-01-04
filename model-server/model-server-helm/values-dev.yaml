@@ -16,4 +16,4 @@ service:
   type: ClusterIP
 
 redis:
-  secretName: redis-secret
+  secretName: redis-server-release-dev-redis-secret
